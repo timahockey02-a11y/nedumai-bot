@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
-from handlers import category, emotion, feedback, result, saved, start
+from handlers import category, emotion, feedback, inline, result, saved, start
 from services.db import init_db
 
 
@@ -23,6 +23,7 @@ async def main() -> None:
 
     dp.include_router(feedback.router)
     dp.include_router(saved.router)
+    dp.include_router(inline.router)
     dp.include_router(start.router)
     dp.include_router(category.router)
     dp.include_router(emotion.router)

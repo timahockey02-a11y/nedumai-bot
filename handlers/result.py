@@ -6,7 +6,7 @@ from data.texts import CATEGORY_QUESTIONS, REJECT_TEXT, SAVED_TOAST
 from handlers.emotion import send_recommendation
 from handlers.states import Flow
 from keyboards.emotions import emotions_kb
-from services.db import log_event, mark_saved
+from services.db import block_name, log_event, mark_saved
 
 router = Router()
 
@@ -16,7 +16,7 @@ async def on_save(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     rec_id = data.get("last_rec_id")
     if not rec_id:
-        await callback.answer("Нечего сохранять", show_alert=False)
+        await callback.answer("Нечего сохранять 🤷", show_alert=False)
         return
     await mark_saved(int(rec_id))
     await log_event(callback.from_user.id, "save", {"rec_id": rec_id})
@@ -46,7 +46,11 @@ async def on_another(callback: CallbackQuery, state: FSMContext, bot: Bot) -> No
 
 @router.callback_query(F.data == "reject")
 async def on_reject(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    await log_event(callback.from_user.id, "reject")
+    data = await state.get_data()
+    rejected_name = data.get("last_rec_name", "")
+    if rejected_name:
+        await block_name(callback.from_user.id, rejected_name)
+    await log_event(callback.from_user.id, "reject", {"name": rejected_name})
     await callback.message.answer(REJECT_TEXT)
     await callback.answer()
     await send_recommendation(callback, state, bot)

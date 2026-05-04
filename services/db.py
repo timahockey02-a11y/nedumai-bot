@@ -35,6 +35,13 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_evt_user ON events(user_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_evt_type ON events(event_type);
+
+CREATE TABLE IF NOT EXISTS blocked (
+    user_id     INTEGER NOT NULL,
+    name        TEXT NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, name)
+);
 """
 
 
@@ -94,6 +101,26 @@ async def get_saved(user_id: int, limit: int = 50) -> list[tuple[str, str, str]]
             (user_id, limit),
         ) as cur:
             return [(r[0], r[1], r[2]) async for r in cur]
+
+
+async def block_name(user_id: int, name: str) -> None:
+    if not name:
+        return
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO blocked (user_id, name) VALUES (?, ?)",
+            (user_id, name),
+        )
+        await db.commit()
+
+
+async def get_blocked_names(user_id: int, limit: int = 100) -> list[str]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT name FROM blocked WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+            (user_id, limit),
+        ) as cur:
+            return [r[0] async for r in cur]
 
 
 async def get_recent_names(user_id: int, limit: int = 30) -> list[str]:

@@ -11,6 +11,7 @@ from data.texts import (
     STATS_FORBIDDEN,
 )
 from services.db import get_saved, log_event, stats
+from services.deepseek import parse_recommendation
 
 router = Router()
 
@@ -27,20 +28,25 @@ async def cmd_saved(message: Message) -> None:
         await message.answer(SAVED_EMPTY)
         return
 
-    chunks = [SAVED_HEADER, ""]
+    chunks = [f"<b>{SAVED_HEADER}</b>", ""]
     for category, name, raw in items:
         emoji = CATEGORY_EMOJI.get(category, "✨")
-        first_line = next((ln.strip() for ln in raw.splitlines() if ln.strip()), name)
-        rest = [ln.strip() for ln in raw.splitlines() if ln.strip()][1:]
-        details = rest[-1] if len(rest) >= 2 else ""
-        block = f"{emoji} <b>{first_line}</b>"
-        if details:
-            block += f"\n📍 {details}"
+        rec = parse_recommendation(raw)
+        title = rec.name or name
+        block = f"{emoji} <b>{_esc(title)}</b>"
+        if rec.address:
+            block += f"\n📍 {_esc(rec.address)}"
+        if rec.price:
+            block += f"\n💰 {_esc(rec.price)}"
         chunks.append(block)
         chunks.append("")
 
     text = "\n".join(chunks).strip()
-    await message.answer(text, parse_mode="HTML")
+    await message.answer(text, parse_mode="HTML", disable_web_page_preview=True)
+
+
+def _esc(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 @router.message(Command("stats"))

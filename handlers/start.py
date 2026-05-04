@@ -1,7 +1,7 @@
 import os
 
 from aiogram import F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, FSInputFile, Message
 
@@ -26,9 +26,12 @@ async def _send_start(message: Message) -> None:
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext) -> None:
+async def cmd_start(message: Message, state: FSMContext, command: CommandObject) -> None:
     await state.clear()
-    await log_event(message.from_user.id, "start")
+    payload = {}
+    if command.args:
+        payload["ref"] = command.args[:64]
+    await log_event(message.from_user.id, "start", payload or None)
     await _send_start(message)
 
 

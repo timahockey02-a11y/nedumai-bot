@@ -14,8 +14,8 @@ from data.texts import (
 )
 from handlers.states import Flow
 from keyboards.emotions import result_kb
-from services.db import get_recent_names, log_event, save_recommendation
-from services.deepseek import get_recommendation
+from services.db import get_blocked_names, get_recent_names, log_event, save_recommendation
+from services.deepseek import Recommendation, get_recommendation
 
 logger = logging.getLogger(__name__)
 
@@ -25,36 +25,47 @@ router = Router()
 SKIP_MAP_CATEGORIES = {"cat_cinema"}
 
 
-def format_card(category: str, raw: str) -> tuple[str, str | None, str]:
-    """Returns (text, map_url, name_for_db)."""
-    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
-    if not lines:
-        return ERROR_TEXT, None, ""
-
-    emoji = CATEGORY_EMOJI.get(category, "✨")
-    name = lines[0]
-
-    if len(lines) == 1:
-        return f"{emoji} {name}", _maybe_map_url(category, name, ""), name
-    if len(lines) == 2:
-        return f"{emoji} {name}\n\n{lines[1]}", _maybe_map_url(category, name, ""), name
-
-    details = lines[-1]
-    description = "\n".join(lines[1:-1])
-    text = f"{emoji} {name}\n\n{description}\n\n📍 {details}"
-    return text, _maybe_map_url(category, name, details), name
-
-
-def _maybe_map_url(category: str, name: str, details: str) -> str | None:
-    if category in SKIP_MAP_CATEGORIES:
-        return None
-    query_parts = [name]
-    if details:
-        query_parts.append(details)
-    query = " ".join(query_parts).strip()
+def _yandex_maps_url(name: str, address: str) -> str | None:
+    parts = [p for p in (name, address) if p]
+    query = " ".join(parts).strip()
     if not query:
         return None
     return f"https://yandex.ru/maps/?text={quote(query)}"
+
+
+def render_card(category: str, rec: Recommendation) -> tuple[str, str | None]:
+    if not rec.name:
+        return ERROR_TEXT, None
+
+    emoji = CATEGORY_EMOJI.get(category, "✨")
+    lines = [f"{emoji} <b>{_html_escape(rec.name)}</b>"]
+    if rec.description:
+        lines.append("")
+        lines.append(_html_escape(rec.description))
+
+    meta_lines = []
+    if rec.address:
+        meta_lines.append(f"📍 {_html_escape(rec.address)}")
+    if rec.price:
+        meta_lines.append(f"💰 {_html_escape(rec.price)}")
+    if rec.link:
+        meta_lines.append(f"🔗 {rec.link}")
+    if meta_lines:
+        lines.append("")
+        lines.extend(meta_lines)
+
+    text = "\n".join(lines)
+
+    map_url = None
+    if category not in SKIP_MAP_CATEGORIES and rec.address:
+        map_url = _yandex_maps_url(rec.name, rec.address)
+    elif category not in SKIP_MAP_CATEGORIES:
+        map_url = _yandex_maps_url(rec.name, "")
+    return text, map_url
+
+
+def _html_escape(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 async def send_recommendation(
@@ -71,26 +82,39 @@ async def send_recommendation(
 
     user_id = callback.from_user.id
     history = await get_recent_names(user_id, limit=30)
+    blocked = await get_blocked_names(user_id, limit=100)
 
     await bot.send_chat_action(callback.message.chat.id, ChatAction.TYPING)
-    await asyncio.sleep(1.5)
+    await asyncio.sleep(1.2)
 
     try:
-        raw = await get_recommendation(category, emotion, previous_list=history)
+        rec = await get_recommendation(
+            category, emotion, previous_list=history, blocked=blocked, max_retries=1
+        )
     except Exception:
         logger.exception("DeepSeek request failed")
         await callback.message.answer(ERROR_TEXT)
         return
 
-    card, map_url, name = format_card(category, raw)
+    if not rec.name:
+        await callback.message.answer(ERROR_TEXT)
+        return
 
-    rec_id = await save_recommendation(user_id, category, emotion, name, raw)
-    await log_event(user_id, "recommendation", {"category": category, "emotion": emotion, "name": name})
+    text, map_url = render_card(category, rec)
 
-    await state.update_data(last_rec_id=rec_id)
+    rec_id = await save_recommendation(user_id, category, emotion, rec.name, rec.raw)
+    await log_event(
+        user_id, "recommendation",
+        {"category": category, "emotion": emotion, "name": rec.name, "conf": rec.confidence},
+    )
+
+    await state.update_data(last_rec_id=rec_id, last_rec_name=rec.name)
     await state.set_state(Flow.WaitingFeedback)
 
-    await callback.message.answer(card, reply_markup=result_kb(map_url=map_url))
+    await callback.message.answer(
+        text, reply_markup=result_kb(map_url=map_url), parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
 
 
 @router.callback_query(Flow.WaitingEmotion, F.data.startswith("em_"))
