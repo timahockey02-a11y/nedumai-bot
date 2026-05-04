@@ -2,17 +2,24 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0f0f12" />
+  <!-- API_BASE: публичный URL Railway-сервиса бота. После деплоя замени на свой. -->
+  <meta name="api-base" content="https://nedumai-bot-production.up.railway.app" />
   <title>Не думай</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+  <!-- Экран категорий -->
   <div id="screen-categories" class="screen active">
-    <header>
-      <h1>Не думай</h1>
-      <p class="lead">Чего хочется сегодня?</p>
+    <header class="header-row">
+      <div>
+        <h1>Не думай</h1>
+        <p class="lead">Чего хочется сегодня?</p>
+      </div>
+      <button id="btnSavedFromHome" class="icon-btn" aria-label="Сохранённые">❤</button>
     </header>
     <div class="grid" id="categories"></div>
     <button class="btn-surprise" id="surpriseBtn">
@@ -21,6 +28,7 @@
     </button>
   </div>
 
+  <!-- Экран эмоций -->
   <div id="screen-emotions" class="screen">
     <header>
       <h2 id="emotionTitle">Какое настроение?</h2>
@@ -29,10 +37,49 @@
     <div class="grid emotions" id="emotions"></div>
   </div>
 
+  <!-- Экран результата -->
+  <div id="screen-result" class="screen">
+    <div class="result-hero" id="resultHero">
+      <div class="result-emoji" id="resultEmoji">✨</div>
+      <h2 class="result-title" id="resultTitle"></h2>
+    </div>
+    <div class="result-body">
+      <p class="result-desc" id="resultDesc"></p>
+      <div class="result-meta" id="resultMeta"></div>
+      <a class="btn-map hidden" id="btnMap" target="_blank" rel="noopener">🗺 Открыть на карте</a>
+    </div>
+    <div class="result-actions">
+      <button class="action-btn primary" id="btnSave">❤<span>Сохранить</span></button>
+      <button class="action-btn" id="btnAnother">🔄<span>Другое</span></button>
+      <button class="action-btn" id="btnReject">👎<span>Не то</span></button>
+    </div>
+    <div class="result-footer">
+      <button class="link-btn" id="btnChangeMood">🔀 Сменить настроение</button>
+      <button class="link-btn" id="btnHome">🏠 В начало</button>
+    </div>
+  </div>
+
+  <!-- Экран сохранённых -->
+  <div id="screen-saved" class="screen">
+    <header>
+      <h2>Сохранённые ❤</h2>
+      <p class="lead lead-sm">Места, которые ты отложил.</p>
+    </header>
+    <div id="savedList" class="saved-list"></div>
+    <div id="savedEmpty" class="saved-empty hidden">
+      <div class="empty-emoji">🤷‍♂️</div>
+      <p>Пока пусто. Жми ❤ под рекомендациями — буду копить тебе коллекцию.</p>
+    </div>
+  </div>
+
+  <!-- Loader overlay -->
   <div id="loader" class="loader hidden">
     <div class="spinner"></div>
-    <p>Бросаю кубик…</p>
+    <p id="loaderText">Бросаю кубик…</p>
   </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
 
   <script src="app.js"></script>
 </body>

@@ -9,6 +9,7 @@ from aiogram.types import MenuButtonCommands, MenuButtonWebApp, WebAppInfo
 from config import BOT_TOKEN
 from handlers import category, emotion, feedback, inline, result, saved, start, webapp
 from services.db import init_db
+from services.web_api import run_web_api
 
 
 async def main() -> None:
@@ -49,7 +50,12 @@ async def main() -> None:
         logging.exception("Failed to set chat menu button")
 
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+
+    port = int(os.getenv("PORT", "8080"))
+
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(dp.start_polling(bot))
+        tg.create_task(run_web_api(port))
 
 
 if __name__ == "__main__":

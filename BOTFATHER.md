@@ -105,6 +105,34 @@ Mini App-страница лежит в репо в папке `webapp/`. Хос
 
 После этого `t.me/nedumai1_bot/app` будет открывать Mini App напрямую — можно шарить как обычный бот.
 
+## Web API для Mini App (важно для нового UX!)
+
+Mini App теперь не закрывается после выбора, а показывает результат внутри. Для этого webapp ходит в HTTP API того же бота.
+
+### Шаг 1 — открыть публичный домен Railway
+
+1. Railway → сервис **nedumai-bot** → **Settings** → **Networking** → **Generate Domain**.
+2. Появится URL вида `https://nedumai-bot-production.up.railway.app`. Скопируй.
+3. В **Variables** убедись, что `PORT` есть (Railway задаёт его автоматически — бот слушает на нём web API).
+
+### Шаг 2 — записать домен в webapp
+
+Открой `webapp/index.html` и поправь meta-тег:
+```html
+<meta name="api-base" content="https://ТВОЙ-ДОМЕН.up.railway.app" />
+```
+Закоммить и запушь — GitHub Pages обновится за 1–2 минуты.
+
+### Шаг 3 — CORS
+
+В Railway → Variables добавь `WEBAPP_ORIGIN=https://timahockey02-a11y.github.io` (или твой домен GitHub Pages, без слеша на конце). Без этой переменной берётся дефолт.
+
+### Локальная отладка без Telegram
+
+Если надо потестить API напрямую через curl/браузер:
+- Установи `WEB_API_DEV_MODE=1` и `WEB_API_DEV_USER_ID=<твой_telegram_id>` в `.env` локально — сервер пропустит валидацию `initData` и подставит этот user_id.
+- В проде ОБЯЗАТЕЛЬНО оставь `WEB_API_DEV_MODE=0`.
+
 ## Persistent storage на Railway (важно!)
 
 По умолчанию SQLite-файл `bot.db` живёт в файловой системе контейнера и **теряется при каждом передеплое**.
