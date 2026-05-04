@@ -14,8 +14,9 @@ from data.texts import (
 )
 from handlers.states import Flow
 from keyboards.emotions import result_kb
+from services import kudago
 from services.db import get_blocked_names, get_recent_names, log_event, save_recommendation
-from services.deepseek import Recommendation, get_recommendation
+from services.deepseek import Recommendation, get_recommendation, pick_event
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,41 @@ def _html_escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _event_to_recommendation(event: kudago.Event, reason: str) -> Recommendation:
+    """Собирает Recommendation из реального KudaGo-события + LLM-обоснования."""
+    description_parts = []
+    if reason:
+        description_parts.append(reason)
+    if event.dates_str:
+        description_parts.append(f"🗓 {event.dates_str}")
+
+    address = event.address
+    if event.place and event.place not in address:
+        address = f"{event.place}, {address}".strip(", ")
+
+    raw_lines = [
+        f"НАЗВАНИЕ: {event.title}",
+        f"ОПИСАНИЕ: {' '.join(description_parts).strip()}",
+    ]
+    if address:
+        raw_lines.append(f"АДРЕС: {address}")
+    if event.price and event.price != "—":
+        raw_lines.append(f"СТОИМОСТЬ: {event.price}")
+    if event.url:
+        raw_lines.append(f"ССЫЛКА: {event.url}")
+    raw_lines.append("УВЕРЕННОСТЬ: высокая")
+
+    return Recommendation(
+        name=event.title,
+        description=" ".join(description_parts).strip(),
+        address=address,
+        price=event.price if event.price != "—" else "",
+        link=event.url,
+        confidence="высокая",
+        raw="\n".join(raw_lines),
+    )
+
+
 async def send_recommendation(
     callback: CallbackQuery,
     state: FSMContext,
@@ -83,18 +119,41 @@ async def send_recommendation(
     user_id = callback.from_user.id
     history = await get_recent_names(user_id, limit=30)
     blocked = await get_blocked_names(user_id, limit=100)
+    skip = list(set(history + blocked))
 
     await bot.send_chat_action(callback.message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(1.2)
 
-    try:
-        rec = await get_recommendation(
-            category, emotion, previous_list=history, blocked=blocked, max_retries=1
-        )
-    except Exception:
-        logger.exception("DeepSeek request failed")
-        await callback.message.answer(ERROR_TEXT)
-        return
+    rec: Recommendation | None = None
+    source = "llm"
+
+    if kudago.is_supported(category):
+        try:
+            events = await kudago.fetch_events(category)
+        except Exception:
+            logger.exception("KudaGo fetch error")
+            events = []
+        if events:
+            try:
+                picked = await pick_event(category, emotion, events, skip_titles=skip)
+            except Exception:
+                logger.exception("KudaGo picker failed")
+                picked = None
+            if picked:
+                event, reason = picked
+                rec = _event_to_recommendation(event, reason)
+                source = "kudago"
+
+    if rec is None:
+        try:
+            rec = await get_recommendation(
+                category, emotion,
+                previous_list=history, blocked=blocked, max_retries=1,
+            )
+        except Exception:
+            logger.exception("DeepSeek request failed")
+            await callback.message.answer(ERROR_TEXT)
+            return
 
     if not rec.name:
         await callback.message.answer(ERROR_TEXT)
@@ -105,7 +164,8 @@ async def send_recommendation(
     rec_id = await save_recommendation(user_id, category, emotion, rec.name, rec.raw)
     await log_event(
         user_id, "recommendation",
-        {"category": category, "emotion": emotion, "name": rec.name, "conf": rec.confidence},
+        {"category": category, "emotion": emotion, "name": rec.name,
+         "conf": rec.confidence, "source": source},
     )
 
     await state.update_data(last_rec_id=rec_id, last_rec_name=rec.name)

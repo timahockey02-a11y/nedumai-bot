@@ -14,6 +14,7 @@ from data.texts import (
     SYSTEM_PROMPT,
     USER_PROMPT_TEMPLATE,
 )
+from services.kudago import Event
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,83 @@ async def _ask_deepseek(category: str, emotion: str, previous_list: list[str]) -
         max_tokens=500,
     )
     return (response.choices[0].message.content or "").strip()
+
+
+_PICKER_SYSTEM = (
+    "Ты — друг в Москве, который помогает выбрать одно событие из списка реальных. "
+    "Ты не выдумываешь — ты выбираешь из того, что дано. "
+    "Отвечаешь строго в формате — никаких вступлений."
+)
+
+_PICKER_USER_TEMPLATE = (
+    "Категория: {category_name}\n"
+    "Настроение пользователя: {emotion_description}\n"
+    "Сейчас в Москве: {time_context}\n"
+    "{skip_note}\n\n"
+    "Выбери ОДНО событие из списка ниже, которое лучше всего подходит под настроение. "
+    "Опирайся только на эти данные, ничего не придумывай.\n\n"
+    "{events}\n\n"
+    "Формат ответа — РОВНО так:\n"
+    "ID: <id выбранного события из списка выше>\n"
+    "ОБОСНОВАНИЕ: 2–3 живых предложения, почему именно это под настроение"
+)
+
+
+async def pick_event(
+    category: str,
+    emotion: str,
+    events: list[Event],
+    skip_titles: list[str] | None = None,
+) -> tuple[Event, str] | None:
+    """Передаёт реальные события в DeepSeek, получает выбранный id + обоснование."""
+    if not events:
+        return None
+
+    skip_titles = skip_titles or []
+    available = [e for e in events if e.title not in skip_titles]
+    if not available:
+        available = events  # если всё в скипе — берём что есть
+
+    category_name = CATEGORY_NAMES.get(category, category)
+    emotion_description = EMOTION_DESCRIPTIONS.get(emotion, emotion)
+
+    skip_note = f"Уже видел — старайся не повторять: {', '.join(skip_titles)}" if skip_titles else ""
+
+    events_block = "\n".join(e.to_prompt_line() for e in available)
+
+    user_prompt = _PICKER_USER_TEMPLATE.format(
+        category_name=category_name,
+        emotion_description=emotion_description,
+        time_context=_time_context(),
+        skip_note=skip_note,
+        events=events_block,
+    )
+
+    response = await _client.chat.completions.create(
+        model="deepseek-chat",
+        messages=[
+            {"role": "system", "content": _PICKER_SYSTEM},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.7,
+        max_tokens=300,
+    )
+    raw = (response.choices[0].message.content or "").strip()
+    logger.info("KudaGo-picker %s/%s -> %s", category, emotion, raw[:120].replace("\n", " "))
+
+    id_match = re.search(r"ID\s*[::]\s*#?(\d+)", raw, re.IGNORECASE)
+    reason_match = re.search(
+        r"ОБОСНОВАНИЕ\s*[::]\s*(.+)", raw, re.IGNORECASE | re.DOTALL,
+    )
+    if not id_match:
+        return None
+    chosen_id = int(id_match.group(1))
+    reason = (reason_match.group(1).strip() if reason_match else "").strip()
+
+    chosen = next((e for e in available if e.id == chosen_id), None)
+    if not chosen:
+        chosen = available[0]
+    return chosen, reason
 
 
 async def get_recommendation(
