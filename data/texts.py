@@ -87,9 +87,11 @@ USER_PROMPT_TEMPLATE = (
 
 ERROR_TEXT = "Что-то пошло не так. Попробуй ещё раз 🤷"
 
-FEEDBACK_QUESTION = "Подошло?"
-FEEDBACK_YES = "Отлично 🙌"
-FEEDBACK_NO = "Ладно, попробуем иначе:"
+REJECT_TEXT = "Ладно, попробуем иначе:"
+
+SAVED_TOAST = "❤️ Сохранил. Смотри список командой /saved"
+SAVED_EMPTY = "Пока ничего не сохранил. Жми ❤️ под рекомендациями."
+SAVED_HEADER = "Твои сохранённые места:"
 
 SURPRISE_REACTION = "🎲 Бросаю кубик…"
 
@@ -98,3 +100,5 @@ FEEDBACK_CMD_PROMPT = (
     "Просто следующим сообщением — я передам создателю."
 )
 FEEDBACK_THANKS = "Спасибо 🙌 Передал."
+
+STATS_FORBIDDEN = "Команда только для создателя бота."

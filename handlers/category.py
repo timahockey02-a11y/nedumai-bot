@@ -13,6 +13,7 @@ from data.texts import (
 from handlers.emotion import send_recommendation
 from handlers.states import Flow
 from keyboards.emotions import emotions_kb
+from services.db import log_event
 
 router = Router()
 
@@ -25,8 +26,9 @@ async def on_category(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
         return
 
-    await state.update_data(category=category, history=[])
+    await state.update_data(category=category)
     await state.set_state(Flow.WaitingEmotion)
+    await log_event(callback.from_user.id, "category", {"category": category})
 
     await callback.message.answer(question, reply_markup=emotions_kb())
     await callback.answer()
@@ -37,8 +39,9 @@ async def on_surprise(callback: CallbackQuery, state: FSMContext, bot: Bot) -> N
     category = random.choice(list(CATEGORY_NAMES.keys()))
     emotion = random.choice(list(EMOTION_DESCRIPTIONS.keys()))
 
-    await state.update_data(category=category, emotion=emotion, history=[])
+    await state.update_data(category=category, emotion=emotion)
+    await log_event(callback.from_user.id, "surprise", {"category": category, "emotion": emotion})
     await callback.message.answer(SURPRISE_REACTION)
     await callback.answer()
 
-    await send_recommendation(callback, state, bot, reset_history=True)
+    await send_recommendation(callback, state, bot)

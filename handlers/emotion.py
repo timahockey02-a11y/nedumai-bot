@@ -11,10 +11,10 @@ from data.texts import (
     CATEGORY_EMOJI,
     EMOTION_REACTIONS,
     ERROR_TEXT,
-    FEEDBACK_QUESTION,
 )
 from handlers.states import Flow
-from keyboards.emotions import feedback_kb, result_kb
+from keyboards.emotions import result_kb
+from services.db import get_recent_names, log_event, save_recommendation
 from services.deepseek import get_recommendation
 
 logger = logging.getLogger(__name__)
@@ -25,23 +25,24 @@ router = Router()
 SKIP_MAP_CATEGORIES = {"cat_cinema"}
 
 
-def format_card(category: str, raw: str) -> tuple[str, str | None]:
+def format_card(category: str, raw: str) -> tuple[str, str | None, str]:
+    """Returns (text, map_url, name_for_db)."""
     lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
     if not lines:
-        return ERROR_TEXT, None
+        return ERROR_TEXT, None, ""
 
     emoji = CATEGORY_EMOJI.get(category, "✨")
     name = lines[0]
 
     if len(lines) == 1:
-        return f"{emoji} {name}", _maybe_map_url(category, name, "")
+        return f"{emoji} {name}", _maybe_map_url(category, name, ""), name
     if len(lines) == 2:
-        return f"{emoji} {name}\n\n{lines[1]}", _maybe_map_url(category, name, "")
+        return f"{emoji} {name}\n\n{lines[1]}", _maybe_map_url(category, name, ""), name
 
     details = lines[-1]
     description = "\n".join(lines[1:-1])
     text = f"{emoji} {name}\n\n{description}\n\n📍 {details}"
-    return text, _maybe_map_url(category, name, details)
+    return text, _maybe_map_url(category, name, details), name
 
 
 def _maybe_map_url(category: str, name: str, details: str) -> str | None:
@@ -60,7 +61,6 @@ async def send_recommendation(
     callback: CallbackQuery,
     state: FSMContext,
     bot: Bot,
-    reset_history: bool = False,
 ) -> None:
     data = await state.get_data()
     category = data.get("category")
@@ -69,7 +69,8 @@ async def send_recommendation(
         await callback.message.answer(ERROR_TEXT)
         return
 
-    history: list[str] = [] if reset_history else list(data.get("history", []))
+    user_id = callback.from_user.id
+    history = await get_recent_names(user_id, limit=30)
 
     await bot.send_chat_action(callback.message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(1.5)
@@ -81,17 +82,15 @@ async def send_recommendation(
         await callback.message.answer(ERROR_TEXT)
         return
 
-    card, map_url = format_card(category, raw)
+    card, map_url, name = format_card(category, raw)
 
-    name = next((ln.strip() for ln in raw.splitlines() if ln.strip()), "")
-    if name:
-        history.append(name)
+    rec_id = await save_recommendation(user_id, category, emotion, name, raw)
+    await log_event(user_id, "recommendation", {"category": category, "emotion": emotion, "name": name})
 
-    await state.update_data(last_result=raw, history=history)
+    await state.update_data(last_rec_id=rec_id)
     await state.set_state(Flow.WaitingFeedback)
 
     await callback.message.answer(card, reply_markup=result_kb(map_url=map_url))
-    await callback.message.answer(FEEDBACK_QUESTION, reply_markup=feedback_kb())
 
 
 @router.callback_query(Flow.WaitingEmotion, F.data.startswith("em_"))
@@ -102,8 +101,9 @@ async def on_emotion(callback: CallbackQuery, state: FSMContext, bot: Bot) -> No
         await callback.answer()
         return
 
-    await state.update_data(emotion=emotion, history=[])
+    await state.update_data(emotion=emotion)
+    await log_event(callback.from_user.id, "emotion", {"emotion": emotion})
     await callback.message.answer(reaction)
     await callback.answer()
 
-    await send_recommendation(callback, state, bot, reset_history=True)
+    await send_recommendation(callback, state, bot)

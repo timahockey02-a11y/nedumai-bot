@@ -29,6 +29,7 @@
 
 ```
 start - запустить бота
+saved - мои сохранённые места
 feedback - написать создателю
 ```
 
@@ -52,9 +53,22 @@ Style: editorial illustration, like The New Yorker meets Notion icons.
 
 Рекомендуемый размер: 1280×720 или 1080×1080, до 5 МБ.
 
-## ADMIN_CHAT_ID для /feedback
+## ADMIN_CHAT_ID для /feedback и /stats
 
 1. В Telegram найди [@userinfobot](https://t.me/userinfobot) → отправь `/start` → он покажет твой numeric ID.
 2. В Railway → Variables → добавь `ADMIN_CHAT_ID=твой_id`.
 3. Передеплой произойдёт автоматически.
-4. После этого при `/feedback` от пользователей сообщения будут падать тебе в личку от твоего бота.
+4. После этого:
+   - при `/feedback` от пользователей сообщения будут падать тебе в личку от твоего бота;
+   - команда `/stats` (только для тебя) показывает агрегированную аналитику.
+
+## Persistent storage на Railway (важно!)
+
+По умолчанию SQLite-файл `bot.db` живёт в файловой системе контейнера и **теряется при каждом передеплое**.
+Чтобы пользовательские данные (сохранённые места, история, аналитика) не пропадали:
+
+1. В Railway → сервис **nedumai-bot** → **Settings** → раздел **Volumes** → **+ New Volume**.
+2. Mount path: `/data` → Create.
+3. Перейди в **Variables** → добавь `DB_PATH=/data/bot.db` → Deploy.
+
+После этого данные переживут любые рестарты и обновления кода.

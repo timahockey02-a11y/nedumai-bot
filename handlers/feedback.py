@@ -8,6 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from data.texts import FEEDBACK_CMD_PROMPT, FEEDBACK_THANKS
+from services.db import log_event
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -36,6 +37,8 @@ async def on_feedback_text(message: Message, state: FSMContext, bot: Bot) -> Non
         f"📩 Feedback от {user_label} (id={user_id}):\n\n{message.text}"
     )
     logger.info("Feedback from %s (%s): %s", user_label, user_id, message.text[:200])
+
+    await log_event(message.from_user.id, "feedback", {"text": message.text[:500]})
 
     if ADMIN_CHAT_ID:
         try:

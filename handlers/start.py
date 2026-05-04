@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, FSInputFile, Message
 
 from data.texts import MAIN_TEXT, START_TEXT
 from keyboards.categories import categories_kb, start_kb
+from services.db import log_event
 
 router = Router()
 
@@ -27,12 +28,14 @@ async def _send_start(message: Message) -> None:
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
+    await log_event(message.from_user.id, "start")
     await _send_start(message)
 
 
 @router.callback_query(F.data == "go")
 async def go_main(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
+    await log_event(callback.from_user.id, "go")
     await callback.message.answer(MAIN_TEXT, reply_markup=categories_kb())
     await callback.answer()
 
@@ -40,5 +43,6 @@ async def go_main(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "home")
 async def go_home(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
+    await log_event(callback.from_user.id, "home")
     await callback.message.answer(MAIN_TEXT, reply_markup=categories_kb())
     await callback.answer()

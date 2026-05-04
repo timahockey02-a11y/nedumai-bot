@@ -25,22 +25,18 @@ def result_kb(map_url: str | None = None) -> InlineKeyboardMarkup:
     if map_url:
         rows.append([InlineKeyboardButton(text="🗺 Открыть на карте", url=map_url)])
     rows.append([
-        InlineKeyboardButton(text="🔄 Другое",            callback_data="another"),
-        InlineKeyboardButton(text="🔀 Сменить настроение", callback_data="change_mood"),
+        InlineKeyboardButton(text="❤️ Сохранить", callback_data="save"),
+        InlineKeyboardButton(text="🔄 Другое",   callback_data="another"),
+        InlineKeyboardButton(text="👎 Не то",    callback_data="reject"),
     ])
     rows.append([
-        InlineKeyboardButton(text="📤 Поделиться", switch_inline_query="Зацени бота «Не думай» — он подсказывает одно место под настроение."),
-        InlineKeyboardButton(text="🏠 В начало",   callback_data="home"),
+        InlineKeyboardButton(text="🔀 Сменить настроение", callback_data="change_mood"),
+        InlineKeyboardButton(text="🏠 В начало",           callback_data="home"),
+    ])
+    rows.append([
+        InlineKeyboardButton(
+            text="📤 Поделиться ботом",
+            switch_inline_query="Зацени бота «Не думай» — он подсказывает одно место под настроение.",
+        ),
     ])
     return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def feedback_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="👍 Да",     callback_data="fb_yes"),
-                InlineKeyboardButton(text="👎 Не то",  callback_data="fb_no"),
-            ],
-        ]
-    )

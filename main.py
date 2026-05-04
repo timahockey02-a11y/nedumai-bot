@@ -5,7 +5,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
-from handlers import category, emotion, feedback, result, start
+from handlers import category, emotion, feedback, result, saved, start
+from services.db import init_db
 
 
 async def main() -> None:
@@ -15,10 +16,13 @@ async def main() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    await init_db()
+
     bot = Bot(BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
 
     dp.include_router(feedback.router)
+    dp.include_router(saved.router)
     dp.include_router(start.router)
     dp.include_router(category.router)
     dp.include_router(emotion.router)
