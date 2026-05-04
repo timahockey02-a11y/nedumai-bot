@@ -15,6 +15,7 @@ from data.texts import (
     USER_PROMPT_TEMPLATE,
 )
 from services.kudago import Event
+from services.yandex_places import Place
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +194,71 @@ async def pick_event(
     reason = (reason_match.group(1).strip() if reason_match else "").strip()
 
     chosen = next((e for e in available if e.id == chosen_id), None)
+    if not chosen:
+        chosen = available[0]
+    return chosen, reason
+
+
+_PICKER_PLACE_USER_TEMPLATE = (
+    "Категория: {category_name}\n"
+    "Настроение пользователя: {emotion_description}\n"
+    "Сейчас в Москве: {time_context}\n"
+    "{skip_note}\n\n"
+    "Вот РЕАЛЬНЫЕ места в Москве из Яндекс.Карт. Выбери ОДНО, которое лучше всего подойдёт "
+    "под настроение. Не выдумывай — выбирай только из списка.\n\n"
+    "{places}\n\n"
+    "Формат ответа — РОВНО так:\n"
+    "ID: <id выбранного места из списка выше>\n"
+    "ОБОСНОВАНИЕ: 2–3 живых предложения, почему именно это место и что там почувствуешь"
+)
+
+
+async def pick_place(
+    category: str,
+    emotion: str,
+    places: list[Place],
+    skip_titles: list[str] | None = None,
+) -> tuple[Place, str] | None:
+    if not places:
+        return None
+    skip_titles = skip_titles or []
+    available = [p for p in places if p.name not in skip_titles] or places
+
+    category_name = CATEGORY_NAMES.get(category, category)
+    emotion_description = EMOTION_DESCRIPTIONS.get(emotion, emotion)
+    skip_note = f"Уже видел — не повторяй: {', '.join(skip_titles)}" if skip_titles else ""
+    places_block = "\n".join(p.to_prompt_line() for p in available)
+
+    user_prompt = _PICKER_PLACE_USER_TEMPLATE.format(
+        category_name=category_name,
+        emotion_description=emotion_description,
+        time_context=_time_context(),
+        skip_note=skip_note,
+        places=places_block,
+    )
+
+    response = await _client.chat.completions.create(
+        model="deepseek-chat",
+        messages=[
+            {"role": "system", "content": _PICKER_SYSTEM},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.7,
+        max_tokens=300,
+    )
+    raw = (response.choices[0].message.content or "").strip()
+    logger.info("Yandex-picker %s/%s -> %s", category, emotion, raw[:120].replace("\n", " "))
+
+    id_match = re.search(r"ID\s*[::]\s*#?([\w.,-]+)", raw, re.IGNORECASE)
+    reason_match = re.search(
+        r"ОБОСНОВАНИЕ\s*[::]\s*(.+)", raw, re.IGNORECASE | re.DOTALL,
+    )
+    if not id_match:
+        return None
+    chosen_id = id_match.group(1).strip()
+    reason = (reason_match.group(1).strip() if reason_match else "").strip()
+
+    chosen = next((p for p in available if p.id == chosen_id), None)
     if not chosen:
         chosen = available[0]
     return chosen, reason

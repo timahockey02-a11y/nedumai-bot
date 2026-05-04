@@ -14,9 +14,9 @@ from data.texts import (
 )
 from handlers.states import Flow
 from keyboards.emotions import result_kb
-from services import kudago
+from services import kudago, yandex_places
 from services.db import get_blocked_names, get_recent_names, log_event, save_recommendation
-from services.deepseek import Recommendation, get_recommendation, pick_event
+from services.deepseek import Recommendation, get_recommendation, pick_event, pick_place
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,10 @@ def render_card(category: str, rec: Recommendation) -> tuple[str, str | None]:
 
     text = "\n".join(lines)
 
+    override = getattr(rec, "map_url_override", None)
+    if override:
+        return text, override
+
     map_url = None
     if category not in SKIP_MAP_CATEGORIES and rec.address:
         map_url = _yandex_maps_url(rec.name, rec.address)
@@ -67,6 +71,36 @@ def render_card(category: str, rec: Recommendation) -> tuple[str, str | None]:
 
 def _html_escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _place_to_recommendation(place: yandex_places.Place, reason: str) -> Recommendation:
+    description = reason.strip()
+    raw_lines = [
+        f"НАЗВАНИЕ: {place.name}",
+        f"ОПИСАНИЕ: {description}",
+    ]
+    if place.address:
+        raw_lines.append(f"АДРЕС: {place.address}")
+    if place.hours:
+        raw_lines.append(f"ЧАСЫ: {place.hours}")
+    if place.url:
+        raw_lines.append(f"ССЫЛКА: {place.url}")
+    raw_lines.append(f"КАРТА: {place.maps_url()}")
+    raw_lines.append("УВЕРЕННОСТЬ: высокая")
+
+    rec = Recommendation(
+        name=place.name,
+        description=description,
+        address=place.address,
+        price="",
+        link=place.url,
+        confidence="высокая",
+        raw="\n".join(raw_lines),
+    )
+    # Стучимся к атрибуту: render_card ниже использует address для построения yandex.ru/maps?text=,
+    # но у нас уже есть точная maps_url. Прокидываем через специальное поле.
+    rec.map_url_override = place.maps_url()  # type: ignore[attr-defined]
+    return rec
 
 
 def _event_to_recommendation(event: kudago.Event, reason: str) -> Recommendation:
@@ -143,6 +177,23 @@ async def send_recommendation(
                 event, reason = picked
                 rec = _event_to_recommendation(event, reason)
                 source = "kudago"
+
+    if rec is None and yandex_places.is_supported(category):
+        try:
+            places = await yandex_places.fetch_places(category, emotion)
+        except Exception:
+            logger.exception("Yandex Places fetch error")
+            places = []
+        if places:
+            try:
+                picked_place = await pick_place(category, emotion, places, skip_titles=skip)
+            except Exception:
+                logger.exception("Yandex Places picker failed")
+                picked_place = None
+            if picked_place:
+                place, reason = picked_place
+                rec = _place_to_recommendation(place, reason)
+                source = "yandex_places"
 
     if rec is None:
         try:
