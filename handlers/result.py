@@ -2,10 +2,25 @@ from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
-from data.texts import FEEDBACK_NO, FEEDBACK_YES
+from data.texts import CATEGORY_QUESTIONS, FEEDBACK_NO, FEEDBACK_YES
 from handlers.emotion import send_recommendation
+from handlers.states import Flow
+from keyboards.emotions import emotions_kb
 
 router = Router()
+
+
+@router.callback_query(F.data == "change_mood")
+async def on_change_mood(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    category = data.get("category")
+    if not category:
+        await callback.answer()
+        return
+    question = CATEGORY_QUESTIONS.get(category, "Какое настроение?")
+    await state.set_state(Flow.WaitingEmotion)
+    await callback.message.answer(question, reply_markup=emotions_kb())
+    await callback.answer()
 
 
 @router.callback_query(F.data == "another")

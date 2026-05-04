@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from urllib.parse import quote
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatAction
@@ -21,22 +22,38 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-def format_card(category: str, raw: str) -> str:
+SKIP_MAP_CATEGORIES = {"cat_cinema"}
+
+
+def format_card(category: str, raw: str) -> tuple[str, str | None]:
     lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
     if not lines:
-        return ERROR_TEXT
+        return ERROR_TEXT, None
 
     emoji = CATEGORY_EMOJI.get(category, "✨")
     name = lines[0]
 
     if len(lines) == 1:
-        return f"{emoji} {name}"
+        return f"{emoji} {name}", _maybe_map_url(category, name, "")
     if len(lines) == 2:
-        return f"{emoji} {name}\n\n{lines[1]}"
+        return f"{emoji} {name}\n\n{lines[1]}", _maybe_map_url(category, name, "")
 
     details = lines[-1]
     description = "\n".join(lines[1:-1])
-    return f"{emoji} {name}\n\n{description}\n\n📍 {details}"
+    text = f"{emoji} {name}\n\n{description}\n\n📍 {details}"
+    return text, _maybe_map_url(category, name, details)
+
+
+def _maybe_map_url(category: str, name: str, details: str) -> str | None:
+    if category in SKIP_MAP_CATEGORIES:
+        return None
+    query_parts = [name]
+    if details:
+        query_parts.append(details)
+    query = " ".join(query_parts).strip()
+    if not query:
+        return None
+    return f"https://yandex.ru/maps/?text={quote(query)}"
 
 
 async def send_recommendation(
@@ -62,11 +79,11 @@ async def send_recommendation(
         await callback.message.answer(ERROR_TEXT)
         return
 
-    card = format_card(category, raw)
+    card, map_url = format_card(category, raw)
     await state.update_data(last_result=raw)
     await state.set_state(Flow.WaitingFeedback)
 
-    await callback.message.answer(card, reply_markup=result_kb())
+    await callback.message.answer(card, reply_markup=result_kb(map_url=map_url))
     await callback.message.answer(FEEDBACK_QUESTION, reply_markup=feedback_kb())
 
 

@@ -4,6 +4,7 @@ from openai import AsyncOpenAI
 
 from config import DEEPSEEK_API_KEY
 from data.texts import (
+    CATEGORY_EXTRA,
     CATEGORY_NAMES,
     EMOTION_DESCRIPTIONS,
     SYSTEM_PROMPT,
@@ -23,10 +24,12 @@ async def get_recommendation(category: str, emotion: str, previous: str = "") ->
     emotion_description = EMOTION_DESCRIPTIONS.get(emotion, emotion)
 
     previous_note = f"Не повторяй: {previous}" if previous else ""
+    extra = CATEGORY_EXTRA.get(category, "")
 
     user_prompt = USER_PROMPT_TEMPLATE.format(
         category_name=category_name,
         emotion_description=emotion_description,
+        extra=extra,
         previous_note=previous_note,
     )
 
