@@ -27,10 +27,15 @@ _client = AsyncOpenAI(
 _MOSCOW = ZoneInfo("Europe/Moscow")
 _WEEKDAYS = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
 
-_FIELD_KEYS = ("НАЗВАНИЕ", "ОПИСАНИЕ", "АДРЕС", "СТОИМОСТЬ", "ССЫЛКА", "УВЕРЕННОСТЬ")
+_FIELD_KEYS = ("НАЗВАНИЕ", "ОПИСАНИЕ", "АДРЕС", "СТОИМОСТЬ", "ССЫЛКА", "УВЕРЕННОСТЬ", "ЧАСЫ")
 _FIELD_RE = re.compile(
     r"^\s*(" + "|".join(_FIELD_KEYS) + r")\s*[::]\s*(.*)$",
     re.IGNORECASE | re.MULTILINE,
+)
+# Метка той же группы, найденная ВНУТРИ значения (LLM иногда слепляет в одну строку).
+_INNER_FIELD_RE = re.compile(
+    r"(?:\s|^)(" + "|".join(_FIELD_KEYS) + r")\s*[::]",
+    re.IGNORECASE,
 )
 
 
@@ -69,6 +74,10 @@ def parse_recommendation(raw: str) -> Recommendation:
         next_start = matches[i + 1].start() if i + 1 < len(matches) else len(raw)
         between = raw[m.end():next_start].strip()
         value = (same_line + ("\n" + between if between else "")).strip().strip("«»\"'")
+        # обрезаем, если внутри значения началась другая метка (бывает при склейке в одну строку)
+        inner = _INNER_FIELD_RE.search(value)
+        if inner and inner.start() > 0:
+            value = value[:inner.start()].strip().strip("«»\"'-—:: ")
         if not value or value.lower() in {"нет", "—", "-", "пусто", "не указано"}:
             continue
         if key == "НАЗВАНИЕ":
@@ -80,7 +89,9 @@ def parse_recommendation(raw: str) -> Recommendation:
         elif key == "СТОИМОСТЬ":
             rec.price = value
         elif key == "ССЫЛКА":
-            rec.link = value
+            # настоящая ссылка должна начинаться с http/www, иначе это шум
+            if re.match(r"^(https?://|www\.)", value, re.IGNORECASE):
+                rec.link = value
         elif key == "УВЕРЕННОСТЬ":
             rec.confidence = value.lower()
 
