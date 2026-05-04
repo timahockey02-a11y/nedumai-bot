@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0" />
+  <meta name="theme-color" content="#0f0f12" />
+  <title>Не думай</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="screen-categories" class="screen active">
+    <header>
+      <h1>Не думай</h1>
+      <p class="lead">Чего хочется сегодня?</p>
+    </header>
+    <div class="grid" id="categories"></div>
+    <button class="btn-surprise" id="surpriseBtn">
+      <span class="dice">🎲</span>
+      <span>Удиви меня — выбери за меня</span>
+    </button>
+  </div>
+
+  <div id="screen-emotions" class="screen">
+    <header>
+      <h2 id="emotionTitle">Какое настроение?</h2>
+      <p class="lead" id="emotionSubtitle"></p>
+    </header>
+    <div class="grid emotions" id="emotions"></div>
+  </div>
+
+  <div id="loader" class="loader hidden">
+    <div class="spinner"></div>
+    <p>Бросаю кубик…</p>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
