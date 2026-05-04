@@ -16,6 +16,9 @@ def categories_kb() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🏃 Спорт",     callback_data="cat_sport"),
                 InlineKeyboardButton(text="🖼 Выставки",  callback_data="cat_exhibitions"),
             ],
+            [
+                InlineKeyboardButton(text="🎲 Удиви меня — выбери за меня", callback_data="surprise"),
+            ],
         ]
     )
 

@@ -5,18 +5,20 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
-from handlers import category, emotion, result, start
+from handlers import category, emotion, feedback, result, start
 
 
 async def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     bot = Bot(BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
 
+    dp.include_router(feedback.router)
     dp.include_router(start.router)
     dp.include_router(category.router)
     dp.include_router(emotion.router)

@@ -17,6 +17,7 @@ async def on_change_mood(callback: CallbackQuery, state: FSMContext) -> None:
     if not category:
         await callback.answer()
         return
+    await state.update_data(history=[])
     question = CATEGORY_QUESTIONS.get(category, "Какое настроение?")
     await state.set_state(Flow.WaitingEmotion)
     await callback.message.answer(question, reply_markup=emotions_kb())
@@ -25,10 +26,8 @@ async def on_change_mood(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "another")
 async def on_another(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    data = await state.get_data()
-    previous = data.get("last_result", "")
     await callback.answer()
-    await send_recommendation(callback, state, bot, previous=previous)
+    await send_recommendation(callback, state, bot)
 
 
 @router.callback_query(F.data == "fb_yes")
@@ -39,8 +38,6 @@ async def on_fb_yes(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "fb_no")
 async def on_fb_no(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    data = await state.get_data()
-    previous = data.get("last_result", "")
     await callback.message.answer(FEEDBACK_NO)
     await callback.answer()
-    await send_recommendation(callback, state, bot, previous=previous)
+    await send_recommendation(callback, state, bot)

@@ -60,7 +60,7 @@ async def send_recommendation(
     callback: CallbackQuery,
     state: FSMContext,
     bot: Bot,
-    previous: str = "",
+    reset_history: bool = False,
 ) -> None:
     data = await state.get_data()
     category = data.get("category")
@@ -69,18 +69,25 @@ async def send_recommendation(
         await callback.message.answer(ERROR_TEXT)
         return
 
+    history: list[str] = [] if reset_history else list(data.get("history", []))
+
     await bot.send_chat_action(callback.message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(1.5)
 
     try:
-        raw = await get_recommendation(category, emotion, previous=previous)
+        raw = await get_recommendation(category, emotion, previous_list=history)
     except Exception:
         logger.exception("DeepSeek request failed")
         await callback.message.answer(ERROR_TEXT)
         return
 
     card, map_url = format_card(category, raw)
-    await state.update_data(last_result=raw)
+
+    name = next((ln.strip() for ln in raw.splitlines() if ln.strip()), "")
+    if name:
+        history.append(name)
+
+    await state.update_data(last_result=raw, history=history)
     await state.set_state(Flow.WaitingFeedback)
 
     await callback.message.answer(card, reply_markup=result_kb(map_url=map_url))
@@ -95,8 +102,8 @@ async def on_emotion(callback: CallbackQuery, state: FSMContext, bot: Bot) -> No
         await callback.answer()
         return
 
-    await state.update_data(emotion=emotion)
+    await state.update_data(emotion=emotion, history=[])
     await callback.message.answer(reaction)
     await callback.answer()
 
-    await send_recommendation(callback, state, bot, previous="")
+    await send_recommendation(callback, state, bot, reset_history=True)
